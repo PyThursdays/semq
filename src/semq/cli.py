@@ -1,14 +1,14 @@
 import json
 import datetime as dt
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from .settings import (
     get_logger,
     SEMQ_DEFAULT_HELLO_WORLD,
 )
 
-from .utils import get_new_partition_filepath
-from .models import FileSystemQueue
+from .q import SimpleExternalQueue
+from .metastore import PartitionFile
 
 logger = get_logger(name=__name__)
 
@@ -21,24 +21,73 @@ class CLI:
     def hello(self, name: Optional[str] = None) -> str:
         return f"Hello, {name or SEMQ_DEFAULT_HELLO_WORLD}!"
 
-    def filepath_example(self, **kwargs):
-        return get_new_partition_filepath(**kwargs)
+    def setup(
+            self,
+            name: str,
+            metastore_path: Optional[str] = None,
+    ):
+        fsq = SimpleExternalQueue(
+            name=name,
+            metastore_path=metastore_path
+        )
+        return fsq.queue_metastore_path
 
-    def pfile_put(self):
-        fsq = FileSystemQueue()
-        return fsq.partition_file_operation_put.filepath
+    def pfile_put(self, name: str):
+        fsq = SimpleExternalQueue(name=name)
+        partition_file = fsq.partition_file_operation_put()
+        return partition_file.filepath
 
-    def pfile_get(self):
-        fsq = FileSystemQueue()
-        return fsq.partition_file_operation_get.filepath
+    def pfile_get(self, name: str, wait_seconds: int = -1):
+        fsq = SimpleExternalQueue(name=name)
+        partition_file = fsq.partition_file_operation_get(wait_seconds=wait_seconds)
+        return partition_file.filepath
 
-    def put(self, **kwargs) -> str:
-        fsq = FileSystemQueue()
-        print(fsq.partition_file_size)
-        item = json.dumps(kwargs)
-        fsq.put(item=item)
-        return fsq.partition_file_operation_put.filepath
+    def pfiles(
+            self,
+            name: str,
+            metastore_path: Optional[str] = None,
+            include_files: bool = False,
+    ):
+        queue = SimpleExternalQueue(
+            name=name,
+            metastore_path=metastore_path,
+        )
+        accum = [] if include_files else None
+        youngest, oldest, files, accum = PartitionFile.files_info(path=queue.queue_metastore_path, accum=accum)
+        return {
+            "queue_metastore_path": queue.queue_metastore_path,
+            "pfiles_active_total": files,
+            "pfile_active_oldest": oldest,
+            "pfile_active_youngest": youngest,
+            **(
+                {
+                    "pfiles": accum,
+                } if include_files else {
+                }
+            )
+        }
 
-    def get(self) -> Dict:
-        fsq = FileSystemQueue()
-        return fsq.get()
+    def size(
+            self,
+            name: str,
+            metastore_path: Optional[str] = None,
+            pfiles_only: bool = False,
+            ignore_requests: bool = False
+    ):
+        fsq = SimpleExternalQueue(
+            name=name,
+            metastore_path=metastore_path,
+        )
+        return fsq.size(
+            include_items=not pfiles_only,
+            ignore_requests=ignore_requests
+        )
+
+    def put(self, name: str, item: Union[Dict, str], hashing: bool = False) -> Dict:
+        queue = SimpleExternalQueue(name=name, item_hashing=hashing)
+        item = item if isinstance(item, str) else json.dumps(item)  # Serialize the item if needed
+        return queue.put(item=item, item_hashing=hashing)
+
+    def get(self, name: str, wait_seconds: int = -1, fail: bool = False) -> Dict:
+        queue = SimpleExternalQueue(name=name)
+        return queue.get(wait_seconds=wait_seconds, fail=fail)
