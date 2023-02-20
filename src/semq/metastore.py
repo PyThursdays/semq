@@ -3,6 +3,7 @@ import uuid
 import json
 import enum
 import time
+import shutil
 import datetime as dt
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
@@ -10,12 +11,9 @@ from dataclasses import dataclass
 from .utils import get_new_partition_filepath
 from .exceptions import (
     UnavailablePartitionFiles,
-    RequestIdentifierNotFoundInRequestFile,
 )
 from .settings import (
     get_logger,
-    SEMQ_DEFAULT_METASTORE_PATH,
-    SEMQ_DEFAULT_PARTITION_SIZE
 )
 
 
@@ -62,17 +60,29 @@ class AbstractFile:
             open(self.filepath, "x").close()
         return self
 
-    def soft_delete(self) -> bool:
-        return os.rename(
-            self.filepath,
-            FilePrefix.apply_prefix_delete(filepath=self.filepath)
-        ) or True
-
+    def soft_delete(self, trash_dirpath: Optional[str] = None, only_rename: bool = False) -> bool:
+        rename = FilePrefix.apply_prefix_delete(filepath=self.filepath)
+        try:
+            if only_rename:
+                return os.rename(
+                    self.filepath,
+                    rename
+                ) or True
+            if trash_dirpath:
+                shutil.move(
+                    self.filepath,
+                    os.path.join(trash_dirpath, os.path.basename(rename)),
+                )
+            raise ValueError("Soft Delete Misconfiguration")
+        except FileNotFoundError:
+            logger.warning("Soft delete failed due to file-not-found error")
+        
 
 @dataclass
 class RequestFile(AbstractFile):
     filepath: str
     partition_file: 'PartitionFile'
+    trash_dirpath: Optional[str] = None
 
     def refresh(self, wait_seconds: int = -1) -> 'RequestFile':
         partition_file_configs = {
@@ -80,9 +90,13 @@ class RequestFile(AbstractFile):
             "path": os.path.dirname(self.partition_file.filepath),
             "wait_seconds": wait_seconds,
         }
-        self.partition_file.soft_delete(), self.soft_delete()
+        # Delete partition file
+        self.partition_file.soft_delete(trash_dirpath=self.trash_dirpath)
+        # Delete request file
+        self.soft_delete(trash_dirpath=self.trash_dirpath)
+        # Create new partition file
         partition_file = self.partition_file.from_path_mode_get(**partition_file_configs)
-        return partition_file.get_request_file()
+        return partition_file.get_request_file(trash_dirpath=self.trash_dirpath)
 
     def request(self, request_id: str, wait_seconds: int = -1):
         partition_file_size = self.partition_file.size
@@ -116,6 +130,7 @@ class PartitionFile(AbstractFile):
             max_size: int,
             item_hashing: bool = False,
     ):
+        print("FROM PATH MODE: PUT")
         return cls.from_path(
             mode=cls.Mode.PUT,
             max_size=max_size,
@@ -151,7 +166,7 @@ class PartitionFile(AbstractFile):
         # Start scanning
         logger.info("Scanning Path for partition files.")
         for file in os.listdir(path):
-            if file.startswith(prefix_options):
+            if file.startswith(prefix_options) or not file.endswith(".json"):
                 continue
             logger.debug("> Partition file iter %d", files)
             # Find the oldest file for "get" scenario
@@ -173,6 +188,7 @@ class PartitionFile(AbstractFile):
             wait_seconds: int = -1,
     ):
         youngest, oldest, files, _ = cls.files_info(path=path, accum=None)
+        print("FROM PATH: ", files)
         if not files and mode == cls.Mode.GET:
             logger.warning("Partition files not found in GET request")
             if wait_seconds < 1:
@@ -187,27 +203,25 @@ class PartitionFile(AbstractFile):
             )
         reference = oldest if mode == cls.Mode.GET else youngest if mode == cls.Mode.PUT else None
         logger.debug("Reference partition file set to: %s", reference)
+        filepath = get_new_partition_filepath(file_path=path) if not files else os.path.join(path, reference)
         return cls(
-            filepath=(
-                get_new_partition_filepath(file_path=path)
-                if not files else
-                os.path.join(path, reference)
-            ),
+            filepath=filepath,
             max_size=max_size,
             partition_files=files,
             item_hashing=item_hashing,
         ).create_if_not_exists()
 
-    def get_request_file(self) -> RequestFile:
+    def get_request_file(self, trash_dirpath: Optional[str] = None) -> RequestFile:
         return RequestFile(
             filepath=FilePrefix.apply_prefix_request(filepath=self.filepath),
             partition_file=self,
+            trash_dirpath=trash_dirpath
         ).create_if_not_exists()
 
     @classmethod
-    def new(cls, max_size: int, partition_files: Optional[int] = None):
+    def new(cls, path: str, max_size: int, partition_files: Optional[int] = None):
         return cls(
-            filepath=get_new_partition_filepath(),
+            filepath=get_new_partition_filepath(file_path=path),
             max_size=max_size,
             partition_files=partition_files,
         ).create_if_not_exists()
@@ -230,126 +244,7 @@ class PartitionFile(AbstractFile):
             for i, _ in enumerate(file):
                 # Soft max validation; should we add a new line to current file or create a new one?
                 if i + 1 >= self.max_size:
-                    return PartitionFile.new(max_size=self.max_size).append(item=item)
+                    pfile = PartitionFile.new(path=os.path.dirname(self.filepath), max_size=self.max_size)
+                    return pfile.append(item=item)
             file.write(line)
         return payload, self
-
-
-class FileSystemQueue:
-
-    def __init__(
-            self,
-            name: str,
-            metastore_path: Optional[str] = None,
-            partition_file_size: Optional[int] = None,
-            item_hashing: bool = False,
-    ):
-        self.name = name
-        self.metastore_path = metastore_path or SEMQ_DEFAULT_METASTORE_PATH
-        self.queue_metastore_path = os.path.join(self.metastore_path, self.name)
-        self.partition_file_size = partition_file_size or SEMQ_DEFAULT_PARTITION_SIZE
-        self.item_hashing = item_hashing
-        # Create the metastore path if not exists
-        os.makedirs(self.queue_metastore_path, exist_ok=True)
-
-    def partition_file_operation_put(self, item_hashing: bool = False) -> PartitionFile:
-        return PartitionFile.from_path_mode_put(
-            max_size=self.partition_file_size,
-            path=self.metastore_path,
-            item_hashing=item_hashing,
-        )
-
-    def partition_file_operation_get(
-            self,
-            wait_seconds: int = -1,
-    ) -> PartitionFile:
-        return PartitionFile.from_path_mode_get(
-            max_size=self.partition_file_size,
-            path=self.metastore_path,
-            wait_seconds=wait_seconds,
-        )
-
-    def put(self, item: str, item_hashing: bool = False) -> Dict:
-        partition_file = self.partition_file_operation_put(item_hashing=item_hashing)
-        payload, _ = partition_file.append(item=item)
-        return payload
-
-    def get_request(
-            self,
-            wait_seconds: int = -1,
-    ) -> Tuple[RequestFile, str]:
-        request_id = str(uuid.uuid4())
-        request_file = self.partition_file_operation_get(wait_seconds=wait_seconds).get_request_file()
-        return request_file.request(request_id=request_id, wait_seconds=wait_seconds), request_id
-
-    def get(
-            self,
-            wait_seconds: int = -1,
-            fail: bool = False,
-    ) -> Optional[Dict]:
-        try:
-            request_file, request_id = self.get_request(wait_seconds=wait_seconds)
-            with open(request_file.filepath, "r") as rfile:
-                for i, line in enumerate(rfile):
-                    if line.startswith(request_id):
-                        break
-                else:
-                    # Request ID not found in request file
-                    raise RequestIdentifierNotFoundInRequestFile(
-                        req_id=request_id,
-                        req_file=request_file.filepath,
-                    )
-
-            # Found request position; extracting same position from partition file
-            with open(request_file.partition_file.filepath, "r") as pfile:
-                for queue_position, line in enumerate(pfile):
-                    if queue_position == i:
-                        payload = json.loads(line.strip())
-                        payload["item_request_id"] = request_id
-                        payload["item_request_file"] = request_file.filepath
-                        payload["item_retrieved_at"] = dt.datetime.utcnow().isoformat()
-                        return payload
-        except UnavailablePartitionFiles:
-            if fail:
-                raise
-            return
-
-    def is_empty(self) -> bool:
-        _, _, files, _ = PartitionFile.files_info(path=self.queue_metastore_path)
-        return files == 0
-
-    def size(self, include_items: bool = False, ignore_requests: bool = False):
-        payload = {
-            "timestamp": dt.datetime.utcnow().isoformat(),
-        }
-        files = [] if include_items else None
-        _, _, num_files, file_names = PartitionFile.files_info(
-            path=self.queue_metastore_path,
-            accum=files
-        )
-        payload["active_partition_files"] = num_files
-        logger.info("Size of active partition files: %d", num_files)
-        if not include_items:
-            return payload
-        items = 0
-        requests = 0
-        for file_name in files:
-            file_path = os.path.join(self.queue_metastore_path, file_name)
-            with open(file_path, "r") as pfile:
-                for i, _ in enumerate(pfile):
-                    pass
-            items += i + 1
-            if ignore_requests:
-                continue
-            request_file = FilePrefix.apply_prefix_request(file_path)
-            if os.path.exists(request_file):
-                with open(request_file, "r") as rfile:
-                    for i, _ in enumerate(rfile):
-                        pass
-                requests += i + 1
-        return {
-            **payload,
-            "total_pending_items": items - requests,
-            "total_items_in_pfiles": items,
-            "total_requests_in_rfiles": requests,
-        }
