@@ -1,6 +1,6 @@
 import json
 import datetime as dt
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from .settings import (
     get_logger,
@@ -75,6 +75,9 @@ class CLI:
         )
         queue.cleanup(everything=everything)
 
+    @staticmethod
+    def discover(metastore_path: Optional[str] = None) -> List[Dict]:
+        return SimpleExternalQueue.discover(metastore_path=metastore_path)
 
     def pfile_put(self, name: str):
         fsq = SimpleExternalQueue(name=name)
