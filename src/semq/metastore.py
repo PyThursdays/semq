@@ -69,10 +69,10 @@ class AbstractFile:
                     rename
                 ) or True
             if trash_dirpath:
-                shutil.move(
+                return shutil.move(
                     self.filepath,
                     os.path.join(trash_dirpath, os.path.basename(rename)),
-                )
+                ) or True
             raise ValueError("Soft Delete Misconfiguration")
         except FileNotFoundError:
             logger.warning("Soft delete failed due to file-not-found error")
@@ -130,7 +130,6 @@ class PartitionFile(AbstractFile):
             max_size: int,
             item_hashing: bool = False,
     ):
-        print("FROM PATH MODE: PUT")
         return cls.from_path(
             mode=cls.Mode.PUT,
             max_size=max_size,
@@ -188,7 +187,6 @@ class PartitionFile(AbstractFile):
             wait_seconds: int = -1,
     ):
         youngest, oldest, files, _ = cls.files_info(path=path, accum=None)
-        print("FROM PATH: ", files)
         if not files and mode == cls.Mode.GET:
             logger.warning("Partition files not found in GET request")
             if wait_seconds < 1:
