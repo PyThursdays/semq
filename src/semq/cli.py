@@ -5,6 +5,8 @@ from typing import Dict, Optional, Union
 from .settings import (
     get_logger,
     SEMQ_DEFAULT_HELLO_WORLD,
+    SEMQ_FLASK_HOST,
+    SEMQ_FLASK_PORT,
 )
 
 from .q import SimpleExternalQueue
@@ -13,10 +15,44 @@ from .metastore import PartitionFile
 logger = get_logger(name=__name__)
 
 
+class CLIServer:
+
+    def run(
+            self,
+            host: Optional[str] = None,
+            port: Optional[str] = None,
+            debug: bool = False,
+            prod: bool = False,
+    ):
+        import importlib
+
+        # Server configuration
+        host = host or SEMQ_FLASK_HOST
+        port = port or SEMQ_FLASK_PORT
+        # Get server flask application
+        server = importlib.import_module("semq.server")
+        app = getattr(server, "app")
+        # Start the server
+        if not prod:
+            return app.run(
+                host=host,
+                port=port,
+                debug=debug,
+            )
+        waitress = importlib.import_module("waitress")
+        serve = getattr(waitress, "serve")
+        return serve(
+            app,
+            host=host,
+            port=port,
+        )
+
+
 class CLI:
 
     def __init__(self):
         self.execution_timestamp = dt.datetime.utcnow()
+        self.backend = CLIServer()
 
     def hello(self, name: Optional[str] = None) -> str:
         return f"Hello, {name or SEMQ_DEFAULT_HELLO_WORLD}!"
