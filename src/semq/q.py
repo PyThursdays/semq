@@ -51,8 +51,20 @@ class SimpleExternalQueue:
         self.setup()
 
     @classmethod
-    def discover(cls, metastore_path: Optional[str] = None) -> List[str]:
-        return os.listdir(metastore_path or SEMQ_DEFAULT_METASTORE_PATH)
+    def discover(cls, metastore_path: Optional[str] = None) -> List[Dict]:
+        metastore_path = metastore_path or SEMQ_DEFAULT_METASTORE_PATH
+
+        return [
+            {
+                "name": queue_name,
+                "path": queue_path,
+                "created_at": os.path.getctime(queue_path),
+                "updated_at": os.path.getmtime(queue_path),
+
+            }
+            for queue_name in os.listdir(metastore_path)
+            for queue_path in [os.path.join(metastore_path, queue_name)]
+        ]
 
     def partition_file_operation_put(self, item_hashing: bool = False) -> PartitionFile:
         return PartitionFile.from_path_mode_put(
