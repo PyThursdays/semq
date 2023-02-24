@@ -1,8 +1,6 @@
-import json
 from flask import Blueprint, request, jsonify
 
-from semq.settings import SEMQ_DEFAULT_METASTORE_PATH
-from semq.q import SimpleExternalQueue
+from .utils import validate_queue_attributes, cleanup_wrapper
 
 # Create endpoint blueprint
 api_queue = Blueprint(
@@ -17,17 +15,9 @@ api_queue = Blueprint(
 def get():
     params = request.args.to_dict()
     # Extract params
-    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
     wait_seconds = int(params.get("wait_seconds", -1))
-    name = params.get("name")
-    # Validate params
-    if not name:
-        raise ValueError("Queue name needed!")
     # Create queue instance
-    queue = SimpleExternalQueue(
-        name=name,
-        metastore_path=metastore_path
-    )
+    queue = validate_queue_attributes(**params)
     return jsonify(queue.get(wait_seconds=wait_seconds))
 
 
@@ -35,49 +25,25 @@ def get():
 def put():
     params = request.args.to_dict()
     # Extract params
-    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
     item = params.get("item")
-    name = params.get("name")
-    # Validate params
-    if not name or not item:
-        raise ValueError("Queue `name` and `item` are required!")
     # Create queue instance
-    queue = SimpleExternalQueue(
-        name=name,
-        metastore_path=metastore_path
-    )
+    queue = validate_queue_attributes(**params)
     return jsonify(queue.put(item=item, item_hashing=True))
-
 
 
 @api_queue.route("/cleanup", methods=["GET"])
 def cleanup():
     params = request.args.to_dict()
-    # Extract params
-    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
-    name = params.get("name")
-    # Validate params
-    if not name:
-        raise ValueError("Queue `name` is required!")
-    # Create queue instance
-    queue = SimpleExternalQueue(
-        name=name,
-        metastore_path=metastore_path
+    return cleanup_wrapper(
+        everything=False,
+        **params
     )
-    return jsonify(queue.cleanup())
+
 
 @api_queue.route("/cleanup-everything", methods=["GET"])
 def cleanup_everything():
     params = request.args.to_dict()
-    # Extract params
-    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
-    name = params.get("name")
-    # Validate params
-    if not name:
-        raise ValueError("Queue `name` is required!")
-    # Create queue instance
-    queue = SimpleExternalQueue(
-        name=name,
-        metastore_path=metastore_path
+    return cleanup_wrapper(
+        everything=True,
+        **params
     )
-    return jsonify(queue.cleanup(everything=True))
