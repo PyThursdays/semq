@@ -26,11 +26,19 @@ class CLI:
             name: str,
             metastore_path: Optional[str] = None,
     ):
-        fsq = SimpleExternalQueue(
+        queue = SimpleExternalQueue(
             name=name,
             metastore_path=metastore_path
         )
-        return fsq.queue_metastore_path
+        queue.setup()
+        return queue.queue_metastore_path
+
+    def cleanup(self, name: str, everything: bool = False):
+        queue = SimpleExternalQueue(
+            name=name,
+        )
+        queue.cleanup(everything=everything)
+
 
     def pfile_put(self, name: str):
         fsq = SimpleExternalQueue(name=name)

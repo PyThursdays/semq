@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import shutil
 import datetime as dt
 from typing import Dict, Tuple, Optional
 
@@ -37,9 +38,17 @@ class SimpleExternalQueue:
         self.item_hashing = item_hashing
         self.trash_dirname = trash_dirname or SEMQ_DEFAULT_METASTORE_TRASHDIR
         self.trash_dirpath = os.path.join(self.queue_metastore_path, self.trash_dirname)
+
+    def setup(self):
         # Create the metastore path if not exists
         os.makedirs(self.queue_metastore_path, exist_ok=True)
         os.makedirs(self.trash_dirpath, exist_ok=True)
+
+    def cleanup(self, everything: bool = False):
+        shutil.rmtree(self.trash_dirpath)
+        if everything:
+            shutil.rmtree(self.queue_metastore_path)
+        self.setup()
 
     def partition_file_operation_put(self, item_hashing: bool = False) -> PartitionFile:
         return PartitionFile.from_path_mode_put(
