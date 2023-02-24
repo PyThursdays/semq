@@ -3,7 +3,7 @@ import uuid
 import json
 import shutil
 import datetime as dt
-from typing import Dict, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 from .metastore import FilePrefix, PartitionFile, RequestFile
 from .exceptions import (
@@ -50,6 +50,10 @@ class SimpleExternalQueue:
             shutil.rmtree(self.queue_metastore_path)
         self.setup()
 
+    @classmethod
+    def discover(cls, metastore_path: Optional[str] = None) -> List[str]:
+        return os.listdir(metastore_path or SEMQ_DEFAULT_METASTORE_PATH)
+
     def partition_file_operation_put(self, item_hashing: bool = False) -> PartitionFile:
         return PartitionFile.from_path_mode_put(
             max_size=self.partition_file_size,
@@ -86,6 +90,7 @@ class SimpleExternalQueue:
             self,
             wait_seconds: int = -1,
             fail: bool = False,
+            exclude_metadata: bool = False,
     ) -> Optional[Dict]:
         try:
             request_file, request_id = self.get_request(wait_seconds=wait_seconds)
@@ -105,6 +110,8 @@ class SimpleExternalQueue:
                 for queue_position, line in enumerate(pfile):
                     if queue_position == i:
                         payload = json.loads(line.strip())
+                        if exclude_metadata:
+                            return payload.get("item")
                         payload["item_request_id"] = request_id
                         payload["item_request_file"] = request_file.filepath
                         payload["item_retrieved_at"] = dt.datetime.utcnow().isoformat()
