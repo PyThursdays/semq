@@ -47,3 +47,37 @@ def put():
         metastore_path=metastore_path
     )
     return jsonify(queue.put(item=item, item_hashing=True))
+
+
+
+@api_queue.route("/cleanup", methods=["GET"])
+def cleanup():
+    params = request.args.to_dict()
+    # Extract params
+    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
+    name = params.get("name")
+    # Validate params
+    if not name:
+        raise ValueError("Queue `name` is required!")
+    # Create queue instance
+    queue = SimpleExternalQueue(
+        name=name,
+        metastore_path=metastore_path
+    )
+    return jsonify(queue.cleanup())
+
+@api_queue.route("/cleanup-everything", methods=["GET"])
+def cleanup_everything():
+    params = request.args.to_dict()
+    # Extract params
+    metastore_path = params.get("metastore_path", SEMQ_DEFAULT_METASTORE_PATH)
+    name = params.get("name")
+    # Validate params
+    if not name:
+        raise ValueError("Queue `name` is required!")
+    # Create queue instance
+    queue = SimpleExternalQueue(
+        name=name,
+        metastore_path=metastore_path
+    )
+    return jsonify(queue.cleanup(everything=True))
