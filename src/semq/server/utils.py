@@ -25,4 +25,3 @@ def validate_queue_attributes(**kwargs) -> SimpleExternalQueue:
         metastore_path=metastore_path,
         item_hashing=True
     )
-        

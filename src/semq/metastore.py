@@ -42,7 +42,7 @@ class FilePrefix(enum.Enum):
 
 
 class AbstractFile:
-    
+
     def __init__(self, filepath: str):
         self.filepath = filepath
 
@@ -76,7 +76,7 @@ class AbstractFile:
             raise ValueError("Soft Delete Misconfiguration")
         except FileNotFoundError:
             logger.warning("Soft delete failed due to file-not-found error")
-        
+
 
 @dataclass
 class RequestFile(AbstractFile):

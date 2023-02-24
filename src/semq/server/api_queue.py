@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 
 from .utils import validate_queue_attributes, cleanup_wrapper
 
+
 # Create endpoint blueprint
 api_queue = Blueprint(
     "queue",
@@ -29,6 +30,7 @@ def put():
     # Create queue instance
     queue = validate_queue_attributes(**params)
     return jsonify(queue.put(item=item, item_hashing=True))
+
 
 @api_queue.route("/size", methods=["GET"])
 def size():
