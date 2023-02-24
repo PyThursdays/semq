@@ -45,6 +45,22 @@ $ python -m semq put --name example --item item-2
 $ python -m semq put --name example --item item-3
 ```
 
+**Via the REST API**
+
+* Endpoint: `/put`
+* Method: `GET`
+* Parameters:
+  * `name`
+  * `metastore`
+  * `item`
+
+Example:
+
+```commandline
+$ curl http://127.0.0.1:9999/queue/put\?name\=example\&item\=hello-world
+```
+
+
 **Via Python**
 
 ```python
@@ -67,6 +83,21 @@ queue.put(item="item-3")
 $ python -m semq get --name example
 ```
 
+**Via the REST API**
+
+* Endpoint: `/get`
+* Method: `GET`
+* Parameters:
+  * `name`
+  * `metastore`
+  * `wait_seconds`
+
+Example:
+
+```commandline
+$ curl http://127.0.0.1:9999/queue/get\?name\=example
+```
+
 **Via Python**
 
 ```python
@@ -87,6 +118,22 @@ print(item)
 ```commandline
 $ python -m semq size --name example
 ```
+
+
+**Via the REST API**
+
+* Endpoint: `/size`
+* Method: `GET`
+* Parameters:
+  * `name`
+  * `metastore`
+
+Example:
+
+```commandline
+$ curl http://127.0.0.1:9999/queue/size\?name\=example
+```
+
 
 **Via Python**
 
