@@ -30,6 +30,15 @@ def put():
     queue = validate_queue_attributes(**params)
     return jsonify(queue.put(item=item, item_hashing=True))
 
+@api_queue.route("/size", methods=["GET"])
+def size():
+    params = request.args.to_dict()
+    # Create queue instance
+    queue = validate_queue_attributes(**params)
+    return jsonify(queue.size(
+        include_items=True
+    ))
+
 
 @api_queue.route("/cleanup", methods=["GET"])
 def cleanup():
