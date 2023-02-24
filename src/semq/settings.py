@@ -31,6 +31,18 @@ SEMQ_DEFAULT_PARTITION_FILE_ENDING = os.environ.get(
 if not SEMQ_DEFAULT_PARTITION_FILE_ENDING.startswith("."):
     SEMQ_DEFAULT_PARTITION_FILE_ENDING = "." + SEMQ_DEFAULT_PARTITION_FILE_ENDING
 
+
+SEMQ_FLASK_HOST = os.environ.get(
+    "SEMQ_FLASK_HOST",
+    default="127.0.0.1"
+)
+
+SEMQ_FLASK_PORT = os.environ.get(
+    "SEMQ_FLASK_PORT",
+    default="9999"
+)
+
+
 SEMQ_DEFAULT_LOGGING_LEVEL = os.environ.get(
     "SEMQ_DEFAULT_LOGGING_LEVEL",
     default="INFO",
